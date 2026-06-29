@@ -15,6 +15,10 @@
     {
       "source": "/api/search/:path*",
       "destination": "https://api.tavily.com/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
