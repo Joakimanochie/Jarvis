@@ -1,6 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Send, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { usePushToTalk } from '@/hooks/usePushToTalk'
+import { useFileAttachment, buildAttachedInput } from '@/hooks/useFileAttachment'
+import MicButton from '@/components/ui/MicButton'
+import AttachButton from '@/components/ui/AttachButton'
+import FileChip from '@/components/ui/FileChip'
 
 interface Exchange {
   id: string
@@ -21,33 +26,53 @@ export default function MiniChat({ runner, color, placeholder, examples }: MiniC
   const [busy, setBusy] = useState(false)
   const [exchanges, setExchanges] = useState<Exchange[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileAttach = useFileAttachment()
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [exchanges])
 
-  async function handleSubmit(e: React.FormEvent) {
+  const submit = useCallback(
+    async (input: string) => {
+      const enriched = buildAttachedInput(input, fileAttach.attachedFile, fileAttach.attachedText, fileAttach.fileType)
+      const trimmed = enriched.trim()
+      if (!trimmed || busy) return
+      setValue('')
+      fileAttach.clearFile()
+      setBusy(true)
+
+      const id = `ex_${Date.now()}`
+      setExchanges((prev) => [...prev, { id, input: trimmed, response: '', streaming: true }])
+
+      try {
+        await runner(trimmed, (fullText) => {
+          setExchanges((prev) => prev.map((ex) => (ex.id === id ? { ...ex, response: fullText } : ex)))
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        setExchanges((prev) => prev.map((ex) => (ex.id === id ? { ...ex, response: `⚠️ ${message}` } : ex)))
+      } finally {
+        setExchanges((prev) => prev.map((ex) => (ex.id === id ? { ...ex, streaming: false } : ex)))
+        setBusy(false)
+      }
+    },
+    [busy, runner]
+  )
+
+  const { state: pttState, interimTranscript, toggle: toggleMic, supported: micSupported } = usePushToTalk({
+    onTranscript: (text) => submit(text),
+  })
+
+  useEffect(() => {
+    if (interimTranscript) setValue(interimTranscript)
+  }, [interimTranscript])
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const input = value.trim()
-    if (!input || busy) return
-    setValue('')
-    setBusy(true)
-
-    const id = `ex_${Date.now()}`
-    setExchanges((prev) => [...prev, { id, input, response: '', streaming: true }])
-
-    try {
-      await runner(input, (fullText) => {
-        setExchanges((prev) => prev.map((ex) => (ex.id === id ? { ...ex, response: fullText } : ex)))
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      setExchanges((prev) => prev.map((ex) => (ex.id === id ? { ...ex, response: `⚠️ ${message}` } : ex)))
-    } finally {
-      setExchanges((prev) => prev.map((ex) => (ex.id === id ? { ...ex, streaming: false } : ex)))
-      setBusy(false)
-    }
+    submit(value)
   }
+
+  const isRecording = pttState === 'recording'
 
   return (
     <div>
@@ -151,16 +176,26 @@ export default function MiniChat({ runner, color, placeholder, examples }: MiniC
             alignItems: 'center',
             gap: '12px',
             background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-default)',
+            border: `1px solid ${isRecording ? '#ef4444' : 'var(--border-default)'}`,
             borderRadius: '12px',
             padding: '12px 16px',
+            boxShadow: isRecording ? '0 0 0 3px rgba(239,68,68,0.12)' : 'none',
+            transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
           }}
         >
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder={busy ? 'Thinking…' : placeholder}
-            disabled={busy}
+            placeholder={
+              isRecording
+                ? 'Listening…'
+                : pttState === 'transcribing'
+                  ? 'Transcribing…'
+                  : busy
+                    ? 'Thinking…'
+                    : placeholder
+            }
+            disabled={busy || isRecording}
             style={{
               flex: 1,
               background: 'none',
@@ -172,27 +207,34 @@ export default function MiniChat({ runner, color, placeholder, examples }: MiniC
               opacity: busy ? 0.6 : 1,
             }}
           />
+          <AttachButton onPress={fileAttach.pickFile} hasFile={!!fileAttach.attachedFile} disabled={busy || isRecording} />
+          <MicButton state={pttState} supported={micSupported} onToggle={toggleMic} color={color} />
           {busy ? (
             <Loader2 size={15} color={color} style={{ animation: 'spin 1s linear infinite' }} />
           ) : (
             <button
               type="submit"
-              disabled={!value.trim()}
+              disabled={!value.trim() || isRecording}
               style={{
-                background: value.trim() ? color : 'var(--bg-hover)',
+                background: value.trim() && !isRecording ? color : 'var(--bg-hover)',
                 border: 'none',
                 borderRadius: '6px',
                 padding: '5px 8px',
-                cursor: value.trim() ? 'pointer' : 'default',
+                cursor: value.trim() && !isRecording ? 'pointer' : 'default',
                 display: 'flex',
                 alignItems: 'center',
               }}
             >
-              <Send size={13} color={value.trim() ? '#000' : 'var(--text-muted)'} />
+              <Send size={13} color={value.trim() && !isRecording ? '#000' : 'var(--text-muted)'} />
             </button>
           )}
         </div>
+        <input ref={fileAttach.inputRef} type="file" accept={fileAttach.accept} onChange={fileAttach.onFileChange} style={{ display: 'none' }} />
+        {fileAttach.attachedFile && (
+          <FileChip file={fileAttach.attachedFile} isProcessing={fileAttach.isProcessing} onClear={fileAttach.clearFile} />
+        )}
       </form>
+      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }

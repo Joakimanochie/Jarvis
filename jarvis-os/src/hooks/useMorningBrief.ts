@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { complete } from '@/integrations/kimi'
+import { complete, isKimiConfigured } from '@/integrations/kimi'
 import { useGoalsStore, selectOverallProgress } from '@/store/goalsStore'
 import { useTasksStore, selectTodaysTasks } from '@/store/tasksStore'
 import { useCommsStore, selectUnreadCount, selectNeedReplyCount } from '@/store/commsStore'
 import { useNewsStore } from '@/store/newsStore'
+import { generateBriefingWithTools } from '@/agents/briefingAgent'
 
 const CACHE_KEY = 'jarvis_morning_brief'
 const TTL = 30 * 60_000 // 30 min
@@ -73,10 +74,18 @@ export function useMorningBrief() {
       await useCommsStore.getState().fetchAll()
       await useNewsStore.getState().fetchTop()
 
-      const text = await complete([{ role: 'user', content: buildPrompt() }], {
-        maxTokens: 160,
-        temperature: 0.7,
-      })
+      // Day 8: use tool-calling briefing agent when Kimi is configured
+      let text: string
+      if (isKimiConfigured()) {
+        try {
+          text = await generateBriefingWithTools()
+        } catch {
+          // fall back to simple prompt if tool-calling fails
+          text = await complete([{ role: 'user', content: buildPrompt() }], { maxTokens: 160, temperature: 0.7 })
+        }
+      } else {
+        text = await complete([{ role: 'user', content: buildPrompt() }], { maxTokens: 160, temperature: 0.7 })
+      }
 
       const trimmed = text.trim()
       setBrief(trimmed)

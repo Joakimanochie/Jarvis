@@ -5,6 +5,7 @@
 import { streamComplete, type ChatMessage } from '@/integrations/kimi'
 import { useFinanceStore, selectMonthTotals, selectExpensesByCategory } from '@/store/financeStore'
 import { useAgentStore } from '@/store/agentStore'
+// Tools available via shared registry (tools.ts) — finance uses direct context injection
 import type { FinanceEntry } from '@/types'
 
 function buildContext(): string {
@@ -48,7 +49,24 @@ Rules:
 - Never emit more than 1 action block per response.
 
 ## Answering questions
-For "what's my financial status this month?", "generate my monthly review" — answer from the context provided. Reference real numbers (income, expenses, net, top categories). Be specific and under 150 words.`
+For "what's my financial status this month?", "generate my monthly review" — answer from the context provided. Reference real numbers (income, expenses, net, top categories). Be specific and under 150 words.
+
+## Monthly review structure
+When asked for financial status or monthly review:
+1. Summary line: "This month: ₦X income, ₦Y expenses, ₦Z net."
+2. Top 3 expense categories ranked by total.
+3. Savings rate: (income - expenses) / income × 100. If < 10%, flag it.
+4. If savings rate < 0%, say so directly — "spending exceeds income."
+
+## Runway calculation
+When asked about runway:
+- runway_months = current_balance / average_monthly_burn (use this month's expenses as burn)
+- Be direct: "At current burn, you have ~X months."
+
+## Savings goal tracking
+When asked about savings goal:
+- Calculate progress from net income accumulated vs stated savings target.
+- If no target stated, suggest setting one.`
 
 interface LogEntryAction {
   type: 'log_entry'
@@ -77,10 +95,11 @@ export function stripActions(response: string): string {
 export async function runFinanceAgent(
   input: string,
   onToken: (fullText: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  skillContent?: string,
 ): Promise<string> {
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: SYSTEM_PROMPT + (skillContent ?? '') },
     { role: 'user', content: `${buildContext()}\n\n## User Request\n${input}` },
   ]
 

@@ -11,6 +11,7 @@ const NewsView = lazy(() => import('@/pages/NewsView'))
 const CouncilView = lazy(() => import('@/pages/CouncilView'))
 const LearningView = lazy(() => import('@/pages/LearningView'))
 const CoFounderView = lazy(() => import('@/pages/CoFounderView'))
+const SkillsView = lazy(() => import('@/pages/SkillsView'))
 const Settings = lazy(() => import('@/pages/Settings'))
 const AuthCallback = lazy(() => import('@/pages/AuthCallback'))
 
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="council" element={<CouncilView />} />
             <Route path="learning" element={<LearningView />} />
             <Route path="cofounder" element={<CoFounderView />} />
+            <Route path="skills" element={<SkillsView />} />
             <Route path="settings" element={<Settings />} />
             <Route path="auth/callback" element={<AuthCallback />} />
           </Route>

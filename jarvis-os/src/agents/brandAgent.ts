@@ -6,6 +6,8 @@ import { streamComplete, type ChatMessage } from '@/integrations/kimi'
 import { useGoalsStore } from '@/store/goalsStore'
 import { useIdeasStore } from '@/store/ideasStore'
 import { usePostsStore } from '@/store/postsStore'
+import { gatherToolContext } from './toolLoop'
+import { getAgentTools } from './tools'
 import { useAgentStore } from '@/store/agentStore'
 
 function buildContext(): string {
@@ -28,6 +30,8 @@ const SYSTEM_PROMPT = `You are the Brand Agent 📣 inside Jarvis OS — helping
 
 Write LinkedIn posts in the voice profile given in context: direct, concrete, first-person, no corporate buzzwords, no emoji spam (max 1-2 emoji).
 
+You have access to tools: Notion (goals, ideas), web search (trends), and Obsidian vault (research notes). When the user says "repurpose this note" or "turn my research into a post", look for the relevant Obsidian note in the tool data below.
+
 ## Actions
 When the user asks you to write/draft a post or carousel, you MUST include an action block at the very END of your response, in exactly this format:
 
@@ -37,12 +41,15 @@ When the user asks you to write/draft a post or carousel, you MUST include an ac
 
 Rules:
 - "content" is the full post text, ready to paste into LinkedIn (use \\n for line breaks).
-- Posts should be 80-200 words unless the user asks for a carousel (then write 5-8 short slide texts separated by "---").
+- Posts should be 80-200 words.
+- Carousels: 5-8 slides, 20-40 words per slide, separated by "---". Structure: hook slide → 3-5 content slides → summary → CTA.
 - Before the action block, give one short sentence ("Here's a draft:").
 - Never emit more than 1 action block per response.
 
 ## Other requests
-- "Turn this research note into a post" / "I need content for this week" (3 post ideas, one sentence each, no action block unless asked to draft one fully) — answer from context.
+- "Turn this research note into a post" / "Repurpose this Obsidian note" → read the note from tool data, extract the key insight, draft a LinkedIn post.
+- "I need content for this week" → 3 post ideas from active projects/goals, one sentence each.
+- "Write a carousel about [topic]" → 5-8 slide outline with hook/content/summary/CTA structure.
 - Keep non-draft responses under 120 words.`
 
 interface CreatePostAction {
@@ -69,11 +76,15 @@ export function stripActions(response: string): string {
 export async function runBrandAgent(
   input: string,
   onToken: (fullText: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  skillContent?: string,
 ): Promise<string> {
+  const { tools, handlers } = getAgentTools('brand')
+  const toolData = await gatherToolContext('a LinkedIn content creator', input, tools, handlers)
+
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: `${buildContext()}\n\n## User Request\n${input}` },
+    { role: 'system', content: SYSTEM_PROMPT + (skillContent ?? '') },
+    { role: 'user', content: `${buildContext()}${toolData}\n\n## User Request\n${input}` },
   ]
 
   const fullResponse = await streamComplete(

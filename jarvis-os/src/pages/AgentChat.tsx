@@ -1,22 +1,47 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Bot, Send, Loader2 } from 'lucide-react'
 import { runJarvis } from '@/agents/orchestrator'
 import { useAgentStore } from '@/store/agentStore'
 import { isKimiConfigured } from '@/integrations/kimi'
 import AgentPanel from '@/components/agent/AgentPanel'
+import { usePushToTalk } from '@/hooks/usePushToTalk'
+import { useFileAttachment, buildAttachedInput } from '@/hooks/useFileAttachment'
+import MicButton from '@/components/ui/MicButton'
+import AttachButton from '@/components/ui/AttachButton'
+import FileChip from '@/components/ui/FileChip'
 
 export default function AgentChat() {
   const [value, setValue] = useState('')
   const busy = useAgentStore((s) => s.busy)
   const exchanges = useAgentStore((s) => s.exchanges)
+  const fileAttach = useFileAttachment()
+
+  const submit = useCallback(
+    (input: string) => {
+      const enriched = buildAttachedInput(input, fileAttach.attachedFile, fileAttach.attachedText, fileAttach.fileType)
+      const trimmed = enriched.trim()
+      if (!trimmed || busy) return
+      setValue('')
+      fileAttach.clearFile()
+      runJarvis(trimmed)
+    },
+    [busy, fileAttach]
+  )
+
+  const { state: pttState, interimTranscript, toggle: toggleMic, supported: micSupported } = usePushToTalk({
+    onTranscript: (text) => submit(text),
+  })
+
+  useEffect(() => {
+    if (interimTranscript) setValue(interimTranscript)
+  }, [interimTranscript])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const input = value.trim()
-    if (!input || busy) return
-    setValue('')
-    runJarvis(input)
+    submit(value)
   }
+
+  const isRecording = pttState === 'recording'
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
@@ -66,7 +91,6 @@ export default function AgentChat() {
         </div>
       )}
 
-      {/* Conversation */}
       {exchanges.length === 0 ? (
         <div
           style={{
@@ -99,16 +123,26 @@ export default function AgentChat() {
             alignItems: 'center',
             gap: '12px',
             background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-default)',
+            border: `1px solid ${isRecording ? '#ef4444' : 'var(--border-default)'}`,
             borderRadius: '12px',
             padding: '12px 16px',
+            boxShadow: isRecording ? '0 0 0 3px rgba(239,68,68,0.12)' : 'none',
+            transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
           }}
         >
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder={busy ? 'Jarvis is thinking…' : 'Message Jarvis…'}
-            disabled={busy}
+            placeholder={
+              isRecording
+                ? 'Listening…'
+                : pttState === 'transcribing'
+                  ? 'Transcribing…'
+                  : busy
+                    ? 'Jarvis is thinking…'
+                    : 'Message Jarvis… or press the mic'
+            }
+            disabled={busy || isRecording}
             style={{
               flex: 1,
               background: 'none',
@@ -120,27 +154,34 @@ export default function AgentChat() {
               opacity: busy ? 0.6 : 1,
             }}
           />
+          <AttachButton onPress={fileAttach.pickFile} hasFile={!!fileAttach.attachedFile} disabled={busy || isRecording} />
+          <MicButton state={pttState} supported={micSupported} onToggle={toggleMic} />
           {busy ? (
             <Loader2 size={15} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
           ) : (
             <button
               type="submit"
-              disabled={!value.trim()}
+              disabled={!value.trim() || isRecording}
               style={{
-                background: value.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+                background: value.trim() && !isRecording ? 'var(--accent)' : 'var(--bg-hover)',
                 border: 'none',
                 borderRadius: '6px',
                 padding: '5px 8px',
-                cursor: value.trim() ? 'pointer' : 'default',
+                cursor: value.trim() && !isRecording ? 'pointer' : 'default',
                 display: 'flex',
                 alignItems: 'center',
               }}
             >
-              <Send size={13} color={value.trim() ? '#000' : 'var(--text-muted)'} />
+              <Send size={13} color={value.trim() && !isRecording ? '#000' : 'var(--text-muted)'} />
             </button>
           )}
         </div>
+        <input ref={fileAttach.inputRef} type="file" accept={fileAttach.accept} onChange={fileAttach.onFileChange} style={{ display: 'none' }} />
+        {fileAttach.attachedFile && (
+          <FileChip file={fileAttach.attachedFile} isProcessing={fileAttach.isProcessing} onClear={fileAttach.clearFile} />
+        )}
       </form>
+      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }

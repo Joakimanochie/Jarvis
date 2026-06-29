@@ -14,6 +14,8 @@ import { runLearningAgent } from './learningAgent'
 import { runCouncilAgent } from './councilAgent'
 import { runFinanceAgent } from './financeAgent'
 import { runCofounderAgent } from './cofounderAgent'
+import { matchSkills, buildSkillPrompt } from '@/integrations/skillsLoader'
+import { buildContextPayload } from '@/memory/contextInjector'
 
 const CLASSIFIER_PROMPT = `Classify the user's request into exactly ONE of these intents. Respond with ONLY the intent word, nothing else.
 
@@ -95,10 +97,23 @@ export async function runJarvis(input: string): Promise<void> {
     agent = 'ops'
   }
 
+  // Match skills for this input + agent
+  const { runner, agent: resolvedAgent } = pickRunner(agent, input)
+  const agentLabel = resolvedAgent === 'research' && /run the council|challenge/.test(input.toLowerCase())
+    ? 'council'
+    : resolvedAgent === 'research' && /quiz|learning|explain|study/.test(input.toLowerCase())
+      ? 'learning'
+      : resolvedAgent === 'ops' && /focused|strategy|synthesise|log decision|log lesson/.test(input.toLowerCase())
+        ? 'cofounder'
+        : resolvedAgent
+  const skills = matchSkills(input, agentLabel)
+  const founderContext = buildContextPayload()
+  const skillContent = `\n\n${founderContext}` + buildSkillPrompt(skills)
+
   store.addLog({
     agent,
     trigger: 'command_bar',
-    action: `Routed input to ${agent} agent`,
+    action: `Routed to ${agent} agent${skills.length ? ` + ${skills.map((s) => s.name).join(', ')}` : ''}`,
     result: 'success',
     output: input.slice(0, 80),
   })
@@ -106,11 +121,9 @@ export async function runJarvis(input: string): Promise<void> {
   const exchangeId = store.startExchange(agent, input)
 
   try {
-    const { runner } = pickRunner(agent, input)
-
     await runner(input, (fullText) => {
       useAgentStore.getState().appendToExchange(exchangeId, fullText)
-    })
+    }, undefined, skillContent)
 
     useAgentStore.getState().finishExchange(exchangeId)
   } catch (err) {

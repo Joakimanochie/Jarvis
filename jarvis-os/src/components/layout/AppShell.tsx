@@ -2,6 +2,12 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import ToastHost from './ToastHost'
+import { useAmbientNarrator } from '@/hooks/useAmbientNarrator'
+
+function AmbientNarrator() {
+  useAmbientNarrator()
+  return null
+}
 
 export default function AppShell() {
   return (
@@ -22,6 +28,7 @@ export default function AppShell() {
         </main>
       </div>
       <ToastHost />
+      <AmbientNarrator />
     </div>
   )
 }

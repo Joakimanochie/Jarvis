@@ -7,6 +7,11 @@
 
 import { streamComplete, complete, type ChatMessage } from '@/integrations/kimi'
 import { useGoalsStore } from '@/store/goalsStore'
+import { useAgentStore } from '@/store/agentStore'
+import { gatherToolContext } from './toolLoop'
+import { getAgentTools } from './tools'
+import { appendToPage } from '@/integrations/notion'
+import { appendNote, isObsidianRunning } from '@/integrations/obsidian'
 
 const ADVISERS = [
   { name: 'The Contrarian', voice: 'Argues against the obvious choice. Finds the weakest assumption and attacks it.' },
@@ -47,11 +52,15 @@ Under 120 words total. Be decisive — no hedging.`
 export async function runCouncilAgent(
   input: string,
   onToken: (fullText: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  skillContent?: string,
 ): Promise<string> {
+  const { tools, handlers } = getAgentTools('council')
+  const toolData = await gatherToolContext('a strategic council', input, tools, handlers)
+
   const adviserMessages: ChatMessage[] = [
     { role: 'system', content: ADVISER_PROMPT },
-    { role: 'user', content: `${buildContext()}\n\n### Decision to debate\n${input}` },
+    { role: 'user', content: `${buildContext()}${toolData}\n\n### Decision to debate\n${input}` },
   ]
 
   let advisersText = ''
@@ -66,7 +75,7 @@ export async function runCouncilAgent(
 
   const chairmanText = await complete(
     [
-      { role: 'system', content: CHAIRMAN_PROMPT },
+      { role: 'system', content: CHAIRMAN_PROMPT + (skillContent ?? '') },
       { role: 'user', content: `${advisersText}\n\n### Original decision\n${input}` },
     ],
     { maxTokens: 250, temperature: 0.4 }
@@ -74,5 +83,24 @@ export async function runCouncilAgent(
 
   const final = `${advisersText}\n\n---\n\n**🏛️ Chairman's Verdict**\n${chairmanText.trim()}`
   onToken(final)
+
+  // Save council output to Notion + Obsidian
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const logText = `── Council: ${input.slice(0, 60)} (${dateStr}) ──\n${final}`
+  const JARVIS_PAGE_ID = import.meta.env.VITE_NOTION_JARVIS_PAGE_ID as string
+  if (JARVIS_PAGE_ID && import.meta.env.VITE_NOTION_API_KEY) {
+    appendToPage(JARVIS_PAGE_ID, logText).catch(() => {})
+  }
+  if (await isObsidianRunning()) {
+    appendNote(`council/${dateStr}.md`, `\n${logText}`).catch(() => {})
+  }
+  useAgentStore.getState().addLog({
+    agent: 'research',
+    trigger: 'command',
+    action: 'Council output saved to Notion + Obsidian',
+    result: 'success',
+    output: input.slice(0, 80),
+  })
+
   return final
 }

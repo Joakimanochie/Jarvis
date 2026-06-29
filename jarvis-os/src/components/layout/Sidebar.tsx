@@ -11,6 +11,7 @@ import {
   Landmark,
   GraduationCap,
   Handshake,
+  Sparkles,
 } from 'lucide-react'
 import AgentLog from '@/components/agent/AgentLog'
 
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/council', label: 'Council', icon: Landmark },
   { path: '/learning', label: 'Learning', icon: GraduationCap },
   { path: '/cofounder', label: 'Co-Founder', icon: Handshake },
+  { path: '/skills', label: 'Skills', icon: Sparkles },
 ]
 
 export default function Sidebar() {

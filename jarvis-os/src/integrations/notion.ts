@@ -252,6 +252,29 @@ function parseFinancePage(page: NotionPage): FinanceEntry {
   }
 }
 
+// ─── Write helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Append a paragraph block to any Notion page by its page ID.
+ * Used by the Ops Agent for "log decision", "append note", etc.
+ */
+export async function appendToPage(pageId: string, text: string): Promise<void> {
+  await notionFetch(`/blocks/${pageId}/children`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      children: [
+        {
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [{ type: 'text', text: { content: text } }],
+          },
+        },
+      ],
+    }),
+  })
+}
+
 // ─── Parsers ─────────────────────────────────────────────────────────────────
 
 interface NotionPage {

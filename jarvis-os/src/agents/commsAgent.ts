@@ -80,8 +80,18 @@ Rules for actions:
 ## Answering questions
 - "What's in my inbox?" → give a triage summary: counts per bucket, then 1-line per urgent/reply item.
 - "Summarise the thread from [sender]" → use the thread content provided in context (if available) for a 3-sentence summary.
-- Flag any email or meeting that relates to an active project.
-- Keep responses under 180 words.`
+- Flag any email or meeting that relates to an active project (check the founder context for active projects).
+- Keep responses under 180 words.
+
+## Meeting notes processing
+When the user says "process this meeting", "meeting notes", "debrief" or provides meeting context:
+1. Extract: title, date, attendees (if known).
+2. Summary: 2-3 sentences on what was discussed.
+3. Key decisions: bullet list of decisions made.
+4. Action items: "- [ ] [Person]: [action] (by [date])" format. If no deadline stated, suggest one.
+5. Open questions: anything unresolved.
+6. Follow-up needed: who to email and about what.
+Suggest saving the notes to Notion and creating follow-up tasks.`
 
 // ─── Action Parsing & Execution ───────────────────────────────────────────────
 
@@ -198,14 +208,15 @@ async function maybeAttachThread(input: string): Promise<string> {
 export async function runCommsAgent(
   input: string,
   onToken: (fullText: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  skillContent?: string,
 ): Promise<string> {
   await useCommsStore.getState().fetchAll()
 
   const threadContext = await maybeAttachThread(input)
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: SYSTEM_PROMPT + (skillContent ?? '') },
     { role: 'user', content: `${buildContext()}${threadContext}\n\n## User Request\n${input}` },
   ]
 

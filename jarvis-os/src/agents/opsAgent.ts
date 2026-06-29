@@ -8,7 +8,9 @@ import { useTasksStore, selectTodaysTasks } from '@/store/tasksStore'
 import { useGoalsStore, selectOverallProgress } from '@/store/goalsStore'
 import { useAgentStore } from '@/store/agentStore'
 import { useToastStore } from '@/store/toastStore'
-import { createTask, updateGoalProgress } from '@/integrations/notion'
+import { createTask, updateGoalProgress, appendToPage } from '@/integrations/notion'
+import { gatherToolContext } from './toolLoop'
+import { getAgentTools } from './tools'
 import type { Task } from '@/types'
 
 // ─── Context Injection ────────────────────────────────────────────────────────
@@ -66,6 +68,12 @@ or
 {"type": "update_goal", "area": "Research|Business|Brand|Finance|Ideas|Wellbeing", "progress": 0-100}
 \`\`\`
 
+or
+
+\`\`\`action
+{"type": "log_decision", "text": "Decision or note to append to Jarvis page in Notion"}
+\`\`\`
+
 Rules for actions:
 - Only emit an action block when the user clearly requests a change.
 - Before the action block, confirm in one short sentence what you're doing.
@@ -91,7 +99,12 @@ interface UpdateGoalAction {
   progress: number
 }
 
-type AgentAction = CreateTaskAction | UpdateGoalAction
+interface LogDecisionAction {
+  type: 'log_decision'
+  text: string
+}
+
+type AgentAction = CreateTaskAction | UpdateGoalAction | LogDecisionAction
 
 function parseActions(response: string): AgentAction[] {
   const actions: AgentAction[] = []
@@ -163,6 +176,18 @@ async function executeActions(actions: AgentAction[]): Promise<string[]> {
         results.push(`Goal area "${action.area}" not found`)
       }
     }
+
+    if (action.type === 'log_decision') {
+      const JARVIS_PAGE_ID = import.meta.env.VITE_NOTION_JARVIS_PAGE_ID as string
+      const timestamped = `[${new Date().toLocaleString('en-GB')}] ${action.text}`
+      useToastStore.getState().show('Decision logged to Notion', '📝')
+      results.push(`Logged: "${action.text}"`)
+      addLog({ agent: 'ops', trigger: 'command', action: 'Logged decision to Notion', result: 'success', output: action.text.slice(0, 80) })
+
+      if (JARVIS_PAGE_ID && import.meta.env.VITE_NOTION_API_KEY) {
+        appendToPage(JARVIS_PAGE_ID, timestamped).catch(console.warn)
+      }
+    }
   }
 
   return results
@@ -178,11 +203,15 @@ export function stripActions(response: string): string {
 export async function runOpsAgent(
   input: string,
   onToken: (fullText: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  skillContent?: string,
 ): Promise<string> {
+  const { tools, handlers } = getAgentTools('ops')
+  const toolData = await gatherToolContext('an operations/task manager', input, tools, handlers)
+
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: `${buildContext()}\n\n## User Request\n${input}` },
+    { role: 'system', content: SYSTEM_PROMPT + (skillContent ?? '') },
+    { role: 'user', content: `${buildContext()}${toolData}\n\n## User Request\n${input}` },
   ]
 
   const fullResponse = await streamComplete(

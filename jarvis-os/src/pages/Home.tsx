@@ -1,3 +1,4 @@
+import MemoryCard from '@/components/dashboard/MemoryCard'
 import BriefingBar from '@/components/dashboard/BriefingBar'
 import CommandBar from '@/components/dashboard/CommandBar'
 import MetricsRow from '@/components/dashboard/MetricsRow'
@@ -11,6 +12,7 @@ import CalendarTimeline from '@/components/dashboard/CalendarTimeline'
 export default function Home() {
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      <MemoryCard />
       <BriefingBar />
       <CommandBar />
       <AgentPanel />

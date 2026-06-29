@@ -1,6 +1,6 @@
-# Jarvis OS — 7-Day Build To-Do List
-> June 1–7, 2026 · Following the Jarvis OS Master Plan v1.3
-> One deliverable per day. Build in order. Ship on Sunday.
+# Jarvis OS — Build To-Do List (Days 1–16)
+> June 1, 2026 onwards · Following the Jarvis OS Master Plan v2.0
+> Days 1–11 complete. Days 12–15 = intelligence upgrade. Day 16 = voice rebuild.
 
 ---
 
@@ -15,6 +15,12 @@
 | Day 5 | Fri, Jun 6 | Communications & Calendar | ✅ Complete |
 | Day 6 | Sat, Jun 7 | Brand, News, Learning, Council & Ideas | ✅ Complete |
 | Day 7 | Sun, Jun 8 | Polish, Finance Agent, Co-Founder & Deploy | ✅ Core agents done, deploy pending |
+| Days 8–11 | Jun 14–27 | Voice foundation (browser-native) | ✅ Complete (superseded by Day 16) |
+| Day 12 | Jun 27 | Skills system | ✅ Complete |
+| Day 13 | Jun 27 | MCP tools wiring | ✅ Complete |
+| Day 14 | Jun 27 | Long-term memory | ✅ Complete |
+| Day 15 | Jun 27 | Agent upgrades + The Council + Co-Founder | ✅ Complete |
+| Day 16 | | Voice rebuild — Deepgram + ElevenLabs (DEFERRED TO LAST) | ⬜ Not started |
 
 ---
 
@@ -371,12 +377,12 @@
 
 **Goal:** Vertical slice proving real tool-calling + spoken output. Built in 6 checkpointed steps (one slice, not split PRs).
 
-- [ ] **Step 1** — De-risk: test `tool_calls` round-trip with Kimi K2.6 via Nvidia NIM specifically. If unsupported, design JSON-action fallback for `completeWithTools()` contract before building on it. *(In parallel: sign up for Tavily API key.)*
-- [ ] **Step 2** — Add `completeWithTools()` to `kimi.ts` (new function, `complete()`/`streamComplete()` untouched). Add Vitest, write tests for it.
-- [ ] **Step 3** — `src/agents/toolLoop.ts`: generic tool-calling loop, 5-iteration cap with partial-result fallback, dedup guard (skip repeat `(tool, args)` calls). Tests.
-- [ ] **Step 4** — `briefingAgent.ts` with `calendar_read` (wraps existing `calendar.ts`) + `notion_read` tools only. Verify end-to-end text briefing works.
-- [ ] **Step 5** — Add `web_search` tool: `/api/search` Vite proxy → Tavily, `webSearch.ts`, wire into briefingAgent.
-- [ ] **Step 6** — Wire `BriefingBar.tsx` "speak briefing" button using Web Speech API `SpeechSynthesis`, with `getVoices()` async-load fix (voiceschanged listener + fallback timeout).
+- [x] **Step 1** — De-risk: Nvidia NIM supports OpenAI tool_calls API natively. `completeWithTools()` uses it directly.
+- [x] **Step 2** — Added `completeWithTools()` to `kimi.ts` (existing `complete()`/`streamComplete()` untouched). Added Vitest v2, 5 passing tests.
+- [x] **Step 3** — `src/agents/toolLoop.ts`: generic tool-calling loop, 5-iteration cap, dedup guard (skip repeat `(tool, args)` calls). 5 passing tests.
+- [x] **Step 4** — `briefingAgent.ts` with `calendar_read` + `notion_read` tools, wired into `useMorningBrief.ts` with fallback.
+- [x] **Step 5** — `src/integrations/webSearch.ts` (Tavily), `/api/search` Vite proxy added, wired into briefingAgent as `web_search` tool.
+- [x] **Step 6** — `BriefingBar.tsx` "Speak" button using Web Speech API `SpeechSynthesis`, voiceschanged listener + 300ms fallback timeout.
 
 ---
 
@@ -385,11 +391,13 @@
 
 **Goal:** Press a button, speak, speech is transcribed and fed into the same `runJarvis()` orchestrator that already routes to all 9 agents. Talking = typing.
 
-- [ ] Add push-to-talk button to `CommandBar.tsx` / `AgentChat.tsx`
-- [ ] STT via Whisper (transformers.js or whisper.cpp) — evaluate against laptop performance
-- [ ] Transcribed text → `runJarvis(input)` (no orchestrator changes needed)
-- [ ] Visual feedback: recording indicator, transcribing state
-- [ ] Test across all 9 agents (ops, research, comms, brand, finance, news, council, learning, cofounder)
+- [x] STT engine: Web Speech API (SpeechRecognition) — zero model download, real-time interim results, works in Chrome/Edge. No perf hit.
+- [x] `src/hooks/usePushToTalk.ts` — states: idle → recording → transcribing → error (auto-clears 3s); interim transcript streams into input live; hand-rolled TS types (no extra @types package needed)
+- [x] `src/components/ui/MicButton.tsx` — idle/recording (pulsing Framer Motion ring)/transcribing (spinner) states; `color` prop tints ring to agent accent; unsupported browser shows disabled MicOff icon
+- [x] `CommandBar.tsx` — mic button added; border turns red while recording; interim transcript fills input; final transcript auto-submits to `runJarvis()`
+- [x] `AgentChat.tsx` — mic button added; same recording border + interim fill + auto-submit pattern
+- [x] `MiniChat.tsx` — mic button added with agent `color` prop; covers Council, Learning, Co-Founder pages — all 9 agents voice-accessible
+- [x] Build clean, all 5 existing tests pass
 
 ---
 
@@ -398,57 +406,272 @@
 
 **Goal:** Always-listening wake word triggers the push-to-talk flow from Day 9 automatically.
 
-- [ ] Evaluate openWakeWord (in-browser ONNX) feasibility in a browser tab
-- [ ] If browser mic lifecycle/permissions are too limited → scope Electron wrapper
-- [ ] Wake word → auto-trigger STT capture → `runJarvis(input)`
-- [ ] Mic permission UX, on/off toggle in Settings
-- [ ] Battery/performance check on current laptop
+- [x] Engine: Continuous Web Speech API — zero dependencies, works in Chrome/Edge, no model download, no perf cost. Electron wrapper not needed.
+- [x] `src/hooks/useWakeWord.ts` — continuous SpeechRecognition; trigger phrases: "hey jarvis", "ok jarvis", "okay jarvis", "jarvis"; auto-restarts after silence; `pause()`/`resume()` for PTT coordination so two SR instances never run simultaneously
+- [x] `src/store/wakeWordSettings.ts` — `getWakeWordEnabled`/`setWakeWordEnabled` with localStorage + `jarvis_wake_word_changed` broadcast event
+- [x] `CommandBar.tsx` — wake word triggers PTT (250 ms gap); PTT end resumes wake word; amber border while wake word listening
+- [x] `Header.tsx` — pulsing amber "Hey Jarvis" pill badge when wake word is active
+- [x] `Settings.tsx` — "Voice & Wake Word" section with animated toggle switch
+- [x] Build clean (392KB, no regressions), 5/5 tests pass
 
 ---
 
-## Day 11 — Proactive Speech & Ambient Narrator Mode (planned)
+## Day 11 — Proactive Speech & Ambient Narrator Mode ✅
 > The actual end goal: Jarvis speaks up on its own — reminders, briefings, narrated changes — without being asked.
 
-**Goal:** Background polling/diffing of calendar, Notion, tasks, Drive (once connected); Jarvis proactively speaks relevant updates via TTS (from Day 8) through the wake-word system (Day 10).
+**Goal:** Background polling/diffing of calendar, Notion, tasks; Jarvis proactively speaks relevant updates via TTS (from Day 8).
 
-- [ ] Background polling service for calendar/Notion/task diffs
-- [ ] "Worth interrupting for" filter (don't narrate every minor change)
-- [ ] Proactive TTS announcements (reminders, "your 3pm just moved", new urgent email, etc.)
-- [ ] Notification preferences in Settings (quiet hours, what to narrate)
-- [ ] Notion write actions (organize pages, log decisions) — extends tool-calling from Day 8 to writes
-- [ ] Google Drive integration (`drive.ts`, OAuth via existing `googleAuth.ts` pattern) as a `drive_search`/`drive_organize` tool
-- [ ] Obsidian — revisit once laptop/setup allows
+- [x] `src/store/narratorSettings.ts` — localStorage-persisted narrator config (enabled, speakMeetings, meetingWarningMins, speakOverdue, autoBriefHour, quietStart/quietEnd)
+- [x] `src/hooks/useAmbientNarrator.ts` — background polling hook (30s interval, mounted in AppShell): upcoming meeting TTS, overdue task TTS, auto-spoken morning briefing at configurable hour, quiet hours respected, dynamic import keeps kimi out of main bundle
+- [x] Settings.tsx "Ambient Narrator" section — master toggle, meeting warning minutes + sub-toggle, overdue tasks toggle, auto-brief hour selector, quiet hours start/end selectors
+- [x] `src/integrations/notion.ts` — `appendToPage()` Notion write function for any page by ID
+- [x] `src/agents/opsAgent.ts` — `log_decision` action: "Log decision: X" → timestamped entry appended to Jarvis Notion page
+- [x] Build clean (397KB main, no regressions), 5/5 tests pass
+- [x] Wake word rewritten to chain (non-continuous) approach for reliable always-on listening
 
 ---
 
-## Environment Variables Checklist
+## Day 12 — Skills System ✅
+### Build Jarvis's skills loader and seed 14 skills from the agency-agents repo
+> **Goal:** Drop a `.md` file into `skills/` → Jarvis loads and executes it on matched intent. No code change required to add a new capability.
 
-All prefixed with `VITE_` (required for Vite browser exposure). Set in both `.env.local` and Vercel dashboard before deploying.
+#### 🗂 Skills Infrastructure
+- [x] Create `skills/` directory at project root
+- [x] Define skill frontmatter schema: `name`, `trigger_phrases[]`, `agent`, `tools_needed[]`, `output_format`
+- [x] Build `src/integrations/skillsLoader.ts` — Vite `import.meta.glob` loads `.md` files at build time, parses YAML frontmatter, returns skill registry
+- [x] Update `src/agents/orchestrator.ts` — after classifying intent, `matchSkills()` finds matching skills by trigger phrases + agent, `buildSkillPrompt()` concatenates them into the system prompt
+- [x] Skills can stack: multiple skills matched → all injected
+- [x] Agent Log shows which skills were loaded per call
+- [x] Build `SkillsView.tsx` — `/skills` page listing all loaded skills with trigger phrases, agent badges, and tool requirements
+- [x] All 9 agents updated to accept optional `skillContent` parameter appended to system prompt
+- [x] Sidebar entry added (Sparkles icon)
+- [x] Route added in App.tsx (lazy-loaded)
+
+#### 📥 Seed Skills — Adapt from agency-agents repo
+Each of these is adapted from `https://github.com/msitarzewski/agency-agents` and saved as a `.md` file in `skills/`. Strip Claude Code-specific formatting, keep the persona, rules, and workflow sections.
+
+- [x] `skills/linkedin-content-creator.md` — Brand Agent: voice rules, post structure, content pillars
+- [x] `skills/carousel-growth-engine.md` — Brand Agent: 5-8 slide carousel structure with hook/content/CTA
+- [x] `skills/email-intelligence.md` — Comms Agent: triage rules, reply drafting, pattern recognition
+- [x] `skills/prompt-engineer.md` — all agents: prompt design principles and debugging checklist
+- [x] `skills/multi-agent-architect.md` — all agents: agent design rules, orchestration patterns
+- [x] `skills/finance-tracker.md` — Finance Agent: expense parsing, categorisation, currency handling
+- [x] `skills/financial-analyst.md` — Finance Agent: monthly reviews, runway calculation, savings tracking
+- [x] `skills/product-trend-researcher.md` — Research Agent: landscape scan, opportunity mapping
+- [x] `skills/chief-of-staff.md` — Co-Founder Agent: operating review structure, push-back rules
+- [x] `skills/business-strategist.md` — Council Chairman: synthesis rules, verdict delivery
+- [x] `skills/meeting-notes.md` — Comms Agent: structured post-call processing with action items
+- [x] `skills/voice-ai-engineer.md` — all agents: STT/TTS pipeline design rules (prep for Day 16)
+- [x] `skills/morning-brief.md` — Ops Agent: morning ritual order, length rules, flowing prose output
+- [x] `skills/weekly-review.md` — Ops Agent: structured weekly review with wins/stuck/focus/reflection
+
+#### ✅ Day 12 Deliverable
+> Say "write me a LinkedIn post about my VLM research" → orchestrator loads `linkedin-content-creator.md` → Brand Agent executes with full skill persona and rules → polished draft returned. Add any new `.md` to `skills/` → Jarvis can use it immediately.
+
+---
+
+## Day 13 — MCP Tools Wiring ✅
+### Every agent gets its tools. Shared tool registry. Google Drive integration added.
+> **Goal:** All MCP tools callable from the right agents. Centralised tool registry. Every agent upgraded with tool-calling.
+
+#### 🔒 Existing MCP Connections (hardened)
+- [x] Gmail MCP — Comms Agent: `fetchInbox()`, `readThread()`, `createDraft()` (confirm-before-send via action blocks)
+- [x] Google Calendar MCP — Comms Agent + Ops Agent: `fetchTodayEvents()`, `fetchWeekEvents()`, `createEvent()`
+- [x] Google Drive MCP — `src/integrations/drive.ts` created: `searchFiles()`, `readFileContent()` (with Google Docs export + binary fallback)
+- [x] Notion MCP — all agents: read tasks/goals/finance, create tasks, append to pages
+- [x] Google Drive scope added to OAuth (`drive.readonly`)
+
+#### Obsidian MCP (built Day 2 — now wired via shared registry)
+- [x] `obsidian.ts` already has: readNote, writeNote, appendNote, searchVault, listFolder, getDailyNote, isObsidianRunning
+- [x] Connection badge in Settings (green/amber)
+- [x] Wired into Research, Ops, Learning, Co-Founder agents via `tools.ts`
+
+#### Web Search MCP (built Day 8 — Tavily — now wired via shared registry)
+- [x] Tavily web search (`webSearch.ts`) wired into Research, Brand, News, Ops, Council, Learning agents
+- [x] Connection status added to Settings page (Tavily Web Search row)
+
+#### 🤝 Agent-to-Tool Matrix — `getAgentTools()` in `tools.ts`
+- [x] Research Agent → web_search, drive_search, drive_read, notion_read, obsidian_search, obsidian_read, obsidian_append
+- [x] Comms Agent → gmail_inbox, gmail_read_thread, gmail_draft, calendar_read, calendar_create (via existing action blocks + context injection)
+- [x] Brand Agent → notion_read, web_search, obsidian_read
+- [x] Ops Agent → calendar_read, notion_read, notion_create_task, notion_append, obsidian_append, obsidian_daily, web_search
+- [x] Finance Agent → notion_read (via direct context injection)
+- [x] News Agent → web_search, notion_read
+- [x] Council Agent → notion_read, web_search
+- [x] Co-Founder Agent → notion_read, obsidian_search, obsidian_read, calendar_read
+- [x] Learning Agent → web_search, notion_read, obsidian_append
+
+#### 🏗 Infrastructure Built
+- [x] `src/agents/tools.ts` — shared tool registry: 16 tool definitions + handlers, `getAgentTools(agent)` returns tools + handlers for each agent
+- [x] `src/integrations/drive.ts` — Google Drive integration: `searchFiles()`, `readFileContent()` (Google Docs export + binary fallback)
+- [x] `gatherToolContext()` in `toolLoop.ts` — pre-flight tool gathering that preserves streaming UX: model picks tools → tools execute → results injected as context → agent streams final response
+- [x] 7 agents upgraded with tool-gathering (Research, Ops, Brand, News, Council, Co-Founder, Learning)
+- [x] `briefingAgent.ts` refactored to use shared tool registry
+- [x] Build clean (398KB main), 5/5 tests pass
+
+#### ✅ Day 13 Deliverable
+> All agents wired to their tools via a centralised registry. `gatherToolContext()` lets agents call tools then stream responses with live data. Google Drive integration added. Agent Log shows which tools fired on every call.
+
+---
+
+## Day 14 — Long-Term Memory System ✅
+### Jarvis knows you. Before you say a word — and after every session.
+> **Goal:** Memory builder saves context at end of each session. Context injector loads it at the start. Jarvis remembers you across days.
+
+#### 🧠 Memory Builder — `src/memory/memoryBuilder.ts`
+- [x] `memoryBuilder.ts` — sends session transcript to Kimi with extraction prompt, gets structured JSON back
+- [x] Extraction prompt extracts: summary, key facts, decisions, projects touched, energy level
+- [x] Saves to localStorage (last 30 sessions) + Notion (appends to Jarvis page) + Obsidian (`memory/sessions/YYYY-MM-DD.md`)
+- [x] "End Session" button in Header triggers builder (dynamic import keeps kimi out of main bundle)
+- [x] `beforeunload` event also triggers memory save on tab close
+- [x] Toast: "Session saved to memory 🧠" on success
+- [x] `src/memory/memoryStore.ts` — extracted pure localStorage functions to avoid kimi import in main bundle
+
+#### 💉 Context Injector — `src/memory/contextInjector.ts`
+- [x] `buildContextPayload()` — assembles: founder profile, goals + progress %, today's tasks, next event, last 5 session memories, pinned context
+- [x] Capped at ~8000 chars (~2000 tokens) to control cost
+- [x] Injected into every agent's system prompt via orchestrator (prepended to skillContent)
+- [x] `getMemorySummary()` — returns greeting + last session summary + memory count for MemoryCard
+- [x] `FounderProfile` — editable in Settings (name, role, active projects, communication style)
+- [x] `pinnedContext` — editable in Settings (freeform text always injected)
+
+#### 🖼 MemoryCard — `src/components/dashboard/MemoryCard.tsx`
+- [x] Shows on Home page (above BriefingBar) when memories exist
+- [x] "Jarvis Remembers" header with session count
+- [x] Last session summary, recent session dates, recent decisions
+- [x] Imports only from `memoryStore` (no kimi in main bundle)
+
+#### ⚙️ Settings — Memory & Context Section
+- [x] Communication style editor (injected into every agent)
+- [x] Active projects editor (comma-separated)
+- [x] Pinned context textarea (always injected — key constraints, important people, commitments)
+
+#### ✅ Day 14 Deliverable
+> End a session → memory builder fires → Notion and Obsidian updated. Open Jarvis the next day → context injector loads → Jarvis greets you knowing where you left off. Cross-session memory is live. Build clean (399KB), 5/5 tests pass.
+
+---
+
+## Day 15 — Agent Upgrades, The Council & Co-Founder ✅
+### Every agent upgraded with skills, tools, and memory. Full end-to-end system tested.
+> **Goal:** All agents load their skills. Council and Co-Founder fully wired. System tested end to end.
+
+#### 🔬 Research Agent Upgrade
+- [x] Skills auto-load via trigger phrases (`product-trend-researcher`, `research-mode`)
+- [x] System prompt expanded: deep research flow with citations, landscape scans, paper summarisation, Drive doc summaries, milestone tracking
+- [x] Citation rules: name papers by real names, "Sources Referenced" section, never fabricate
+
+#### 📣 Brand Agent Upgrade
+- [x] Skills auto-load (`linkedin-content-creator`, `carousel-growth-engine`)
+- [x] Carousel support: 5-8 slide structure with hook/content/summary/CTA
+- [x] "Repurpose this Obsidian note" → obsidian_read tool gathers note → Brand Agent drafts LinkedIn post
+- [x] Tool-aware prompt: mentions Notion, web search, Obsidian access
+
+#### 💰 Finance Agent Upgrade
+- [x] Skills auto-load (`finance-tracker`, `financial-analyst`)
+- [x] Monthly review structure: summary line, top 3 categories, savings rate, negative flag
+- [x] Runway calculation: current_balance / monthly_burn → months remaining
+- [x] Savings goal tracking with rate calculation
+
+#### 📬 Comms Agent Upgrade
+- [x] Skills auto-load (`email-intelligence`, `meeting-notes`)
+- [x] Meeting notes processing: extracts title, attendees, summary, decisions, action items, follow-ups
+- [x] Triage now flags emails connected to active projects (via founder context injection)
+
+#### 🏛 The Council — Upgraded (already existed from Day 6)
+- [x] 5-adviser system + Chairman synthesis (built Day 6) — now with tool access (Day 13) + skill injection (Day 12)
+- [x] `business-strategist.md` skill auto-loads for Chairman via trigger phrases
+- [x] Council output auto-saved to Notion (Jarvis page) + Obsidian (`council/YYYY-MM-DD.md`)
+- [x] Agent Log records council save
+
+#### 🤝 Co-Founder Agent — Upgraded (already existed from Day 7)
+- [x] `chief-of-staff.md` skill auto-loads via trigger phrases
+- [x] System prompt expanded: weekly operating review structure (progress snapshot, what's working, what's stuck, strategic tension, one recommendation)
+- [x] Push-back rules: flags stalled goals (7+ days), missing LinkedIn posts (7+ days), decision contradictions
+- [x] Decisions + lessons now sync to Notion (Jarvis page) + Obsidian (`cofounder/decisions.md`, `cofounder/lessons.md`)
+- [x] Weekly operating review auto-triggers Monday 9-10am via ambient narrator
+
+#### 🧪 System Verification
+- [x] Build clean (400KB main bundle), 5/5 tests pass
+- [x] All 14 skills loaded at build time, auto-matched by trigger phrases
+- [x] All agents have tool access via shared registry (Day 13)
+- [x] Memory context injected into every agent call (Day 14)
+- [x] Council + Co-Founder save output to Notion + Obsidian
+- [x] Monday auto-review fires via ambient narrator
+
+#### ✅ Day 15 Deliverable
+> All agents upgraded with skills, tools, and cross-session memory. Council saves deliberations. Co-Founder syncs decisions/lessons to Notion + Obsidian and auto-runs Monday reviews. The full daily ritual works end to end.
+
+---
+
+## Day 16 — Voice Rebuild (The Real Voice OS) ⚠️ DEFERRED TO LAST
+### Replace browser voice with Deepgram STT + ElevenLabs TTS. Build the real conversation loop.
+> **Goal:** Natural spoken conversation with Jarvis. No keyboard needed. Press `⌘J`, speak freely, Jarvis understands and speaks back with a real voice.
+>
+> ⚠️ **Prerequisite:** Confirm you have budget for Deepgram API (~$0.006/min audio) and ElevenLabs ($5/mo starter) or OpenAI TTS before starting. Alternative: use OpenAI Whisper API + OpenAI TTS as a single-vendor option.
+
+#### 🎙 STT — Deepgram Nova-2
+- [ ] Add `DEEPGRAM_API_KEY` to `.env.local`
+- [ ] Install Deepgram SDK: `npm install @deepgram/sdk`
+- [ ] Build `src/voice/stt.ts` — WebSocket stream to Deepgram Nova-2 model
+- [ ] Configure: `model: 'nova-2'`, `language: 'en'`, `interim_results: true`, `endpointing: 500` (ms of silence to mark end of utterance)
+- [ ] Audio preprocessing: resample to 16kHz mono via Web Audio API before sending chunks
+- [ ] Display interim transcript live in VoiceMode UI as you speak
+- [ ] Handle: microphone permission denied → friendly error; API timeout → retry with backoff; network drop → reconnect
+
+#### 🔊 TTS — ElevenLabs (or OpenAI TTS fallback)
+- [ ] Add `ELEVENLABS_API_KEY` to `.env.local`
+- [ ] Build `src/voice/tts.ts` — ElevenLabs streaming TTS
+- [ ] Choose voice: browse ElevenLabs voice library, select one that fits Jarvis's personality (calm, clear, authoritative)
+- [ ] Stream audio chunks as they arrive — don't wait for full response before playing
+- [ ] Queue system: if new response comes in while speaking, queue it; don't interrupt mid-sentence
+- [ ] Fallback chain: ElevenLabs unavailable → OpenAI TTS → browser SpeechSynthesis (last resort)
+
+#### 💬 Conversation Loop — `src/voice/conversationLoop.ts`
+- [ ] Build persistent conversation session manager
+- [ ] Loop: listen (Deepgram) → transcript finalised → send to orchestrator (claude-sonnet-4-6) → agent fires + tools execute → response text → TTS speaks → listen again
+- [ ] Session memory: maintain full transcript in `voiceStore` (Zustand) during the session
+- [ ] Context threading: inject last 5 exchanges into every Claude call (so "push it" knows what "it" refers to)
+- [ ] Long-term memory bridge: context injector loaded at session start; memory builder triggered at session end
+- [ ] Optional wake word: "Hey Jarvis" detected via Deepgram keyword spotting → activates listening mode without button press
+
+#### 🎛 Voice Mode UI — `src/components/voice/VoiceMode.tsx`
+- [ ] Full-screen minimal voice UI (activated via `⌘J`)
+- [ ] Centre: Jarvis orb — animated states: idle (dim pulse) → listening (amber pulse) → thinking (rotate) → speaking (waveform)
+- [ ] Below orb: live transcript text as you speak
+- [ ] Top right: agent identity badge when an agent responds ("Ops Agent", "Research Agent", etc.)
+- [ ] Bottom: scrollable session transcript panel (current session only)
+- [ ] Exit: press `⌘J` again or `Escape` → closes voice mode → triggers memory builder for session
+
+#### ✅ Day 16 Deliverable
+> Press `⌘J`. Jarvis orb activates. Say "What's on today?" — Jarvis checks Calendar MCP and Notion tasks, then speaks a natural brief back to you. Say "write a LinkedIn post about my VLM findings" — Brand Agent fires, loads linkedin-content-creator skill, reads the draft back in Jarvis's real voice. Say "goodbye Jarvis" — session ends, memory saved. The voice OS is live.
+
+---
+
+## Environment Variables — Full Checklist
 
 ```bash
-# AI Engine — Kimi K2.6 via Nvidia NIM
+# Already set (Days 1–11)
 VITE_NVIDIA_API_KEY=        ← Get from https://build.nvidia.com/moonshotai/kimi-k2.6
-                              Base URL: https://integrate.api.nvidia.com/v1
-                              Model: moonshotai/kimi-k2.6
-
-# Notion
-VITE_NOTION_API_KEY=        ← Paste "Jarvis" token from app.notion.com/my-integrations (already created ✅)
+VITE_NOTION_API_KEY=        ← Paste "Jarvis" token from app.notion.com/my-integrations
 VITE_NOTION_TASK_DB_ID=39581b20-8060-49b1-80e5-33cbfeeff50e
 VITE_NOTION_JARVIS_PAGE_ID=36f90e11-e76c-81c9-9f5b-e015ae7d7036
 VITE_NOTION_GOALS_DB_ID=    ← Create Goals database in Notion, share with Jarvis integration, paste ID
-
-# Google (OAuth 2.0)
 VITE_GOOGLE_CLIENT_ID=      ← Get from console.cloud.google.com
 VITE_GOOGLE_CLIENT_SECRET=
 VITE_GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback
-
-# Obsidian (local — requires app running on same machine)
+VITE_NEWS_API_KEY=          ← Get from newsapi.org (free = 100 req/day)
+VITE_TAVILY_API_KEY=        ← Get from tavily.com
 VITE_OBSIDIAN_API_KEY=      ← Settings → Local REST API → Security in Obsidian
 VITE_OBSIDIAN_HOST=http://127.0.0.1:27123
-VITE_OBSIDIAN_VAULT_PATH=   ← Absolute path to your vault
 
-# News
-VITE_NEWS_API_KEY=          ← Get from newsapi.org (free = 100 req/day)
+# Add for Day 13 — Web Search
+BRAVE_API_KEY=              ← From brave.com/search/api (or use PERPLEXITY_API_KEY)
+
+# Add for Day 16 — Voice STT
+DEEPGRAM_API_KEY=           ← From deepgram.com (or OPENAI_API_KEY for Whisper)
+
+# Add for Day 16 — Voice TTS
+ELEVENLABS_API_KEY=         ← From elevenlabs.io (or use OpenAI TTS with OPENAI_API_KEY)
 
 # App
 VITE_APP_URL=http://localhost:5173
@@ -547,6 +770,40 @@ VITE_APP_URL=http://localhost:5173
 - [ ] App live at production URL
 - [ ] Smoke test passes on production
 
+### Day 12 — Skills System
+- [ ] `skills/` folder exists with 14 seed skill files
+- [ ] `skillsLoader.ts` reads and parses all skill files into a registry
+- [ ] Orchestrator matches intent to skill and injects into system prompt
+- [ ] Skills view shows all loaded skills in Settings
+
+### Day 13 — MCP Tools
+- [x] All MCP tools (Gmail, Calendar, Drive, Notion, Obsidian, Web Search) in shared registry
+- [x] Google Drive integration added (`drive.ts`)
+- [x] `gatherToolContext()` — pre-flight tool gathering preserving streaming UX
+- [x] Agent-to-tool matrix fully wired via `getAgentTools()`
+
+### Day 14 — Long-Term Memory
+- [x] Memory builder extracts + saves session to localStorage + Notion + Obsidian
+- [x] Context injector loads founder profile + memories + goals + tasks on every agent call
+- [x] MemoryCard shown on Home with session history and recent decisions
+- [x] Founder Profile and Pinned Context editable in Settings
+- [x] "End Session" button in Header + beforeunload trigger
+
+### Day 15 — Agent Upgrades
+- [x] All agents upgraded with enriched prompts + tool/skill/memory access
+- [x] Council saves output to Notion + Obsidian
+- [x] Co-Founder syncs decisions/lessons to Notion + Obsidian
+- [x] Monday auto-review triggers via ambient narrator
+- [x] Build clean (400KB), 5/5 tests pass
+
+### Day 16 — Voice Rebuild
+- [ ] Deepgram STT streaming and transcribing accurately
+- [ ] ElevenLabs TTS sounding natural (not robotic)
+- [ ] Conversation loop: multi-turn with session context threading
+- [ ] Memory builder fires at session end
+- [ ] `⌘J` activates/deactivates voice mode
+- [ ] Full voice ritual test: speak morning brief request → Jarvis speaks back natural response
+
 ---
 
-_Built from the Jarvis OS Master Plan v1.3 · AI Engine: Kimi K2.6 via Nvidia NIM (moonshotai/kimi-k2.6) · Start: June 2, 2026 · Ship: June 8, 2026_
+_Days 12–16 added 2026-06-25. Model: claude-sonnet-4-6. Voice deferred to Day 16 — last, by design._

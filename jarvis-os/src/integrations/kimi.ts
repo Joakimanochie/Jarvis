@@ -11,6 +11,26 @@ import OpenAI from 'openai'
 
 export const KIMI_MODEL = 'moonshotai/kimi-k2.6'
 
+// ─── Tool-calling types ─────────────────────────────────────────────────────
+
+export interface ToolDefinition {
+  name: string
+  description: string
+  parameters: Record<string, unknown> // JSON Schema object
+}
+
+export interface ToolCall {
+  id: string
+  name: string
+  arguments: Record<string, unknown>
+}
+
+export interface ToolsResult {
+  toolCalls: ToolCall[]
+  text: string
+  finishReason: string
+}
+
 const API_KEY = import.meta.env.VITE_NVIDIA_API_KEY as string
 
 let _client: OpenAI | null = null
@@ -87,4 +107,58 @@ export async function streamComplete(
     }
   }
   return fullText
+}
+
+/**
+ * Non-streaming completion with tool/function calling.
+ * Returns the tool calls requested by the model (if any) plus any text content.
+ * Nvidia NIM supports the OpenAI tool_calls API — this uses it natively.
+ */
+export async function completeWithTools(
+  messages: ChatMessage[],
+  tools: ToolDefinition[],
+  options: { maxTokens?: number; temperature?: number } = {}
+): Promise<ToolsResult> {
+  const client = getClient()
+
+  const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools.map((t) => ({
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    },
+  }))
+
+  const res = await client.chat.completions.create({
+    model: KIMI_MODEL,
+    messages,
+    tools: openaiTools,
+    tool_choice: 'auto',
+    max_tokens: options.maxTokens ?? 1024,
+    temperature: options.temperature ?? 0.6,
+  })
+
+  const choice = res.choices[0]
+  const msg = choice.message
+  const finishReason = choice.finish_reason ?? 'stop'
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const toolCalls: ToolCall[] = (msg.tool_calls ?? []).map((tc: any) => ({
+    id: tc.id as string,
+    name: (tc.function?.name ?? '') as string,
+    arguments: (() => {
+      try {
+        return JSON.parse(tc.function?.arguments ?? '{}') as Record<string, unknown>
+      } catch {
+        return {}
+      }
+    })(),
+  }))
+
+  return {
+    toolCalls,
+    text: msg.content ?? '',
+    finishReason,
+  }
 }

@@ -5,6 +5,8 @@
 import { streamComplete, type ChatMessage } from '@/integrations/kimi'
 import { useNewsStore } from '@/store/newsStore'
 import { searchNews } from '@/integrations/news'
+import { gatherToolContext } from './toolLoop'
+import { getAgentTools } from './tools'
 
 function buildContext(): string {
   const { stories } = useNewsStore.getState()
@@ -27,7 +29,8 @@ Keep responses under 180 words. Cite source names from context.`
 export async function runNewsAgent(
   input: string,
   onToken: (fullText: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  skillContent?: string,
 ): Promise<string> {
   await useNewsStore.getState().fetchTop()
 
@@ -47,9 +50,16 @@ export async function runNewsAgent(
     }
   }
 
+  // If no inline search matched, try tool-based web search
+  let toolData = ''
+  if (!extra) {
+    const { tools, handlers } = getAgentTools('news')
+    toolData = await gatherToolContext('a news agent', input, tools, handlers)
+  }
+
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: `${buildContext()}${extra}\n\n## User Request\n${input}` },
+    { role: 'system', content: SYSTEM_PROMPT + (skillContent ?? '') },
+    { role: 'user', content: `${buildContext()}${extra}${toolData}\n\n## User Request\n${input}` },
   ]
 
   return streamComplete(messages, (_token, fullText) => onToken(fullText), { signal })

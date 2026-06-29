@@ -30,6 +30,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/news/, ''),
       },
+      // Proxy Tavily web search calls to avoid CORS issues in dev
+      '/api/search': {
+        target: 'https://api.tavily.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/search/, ''),
+      },
     },
   },
 })

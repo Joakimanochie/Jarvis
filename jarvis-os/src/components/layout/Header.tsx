@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useCommsStore, selectNextEvent } from '@/store/commsStore'
+import { getWakeWordEnabled } from '@/store/wakeWordSettings'
 import type { CalendarEvent } from '@/types'
 
 function getGreeting() {
@@ -29,6 +30,7 @@ function nextMeetingLabel(next: CalendarEvent | null): string | null {
 export default function Header() {
   const [dateTime, setDateTime] = useState(formatDateTime())
   const { events, fetchAll } = useCommsStore()
+  const [wakeActive, setWakeActive] = useState(getWakeWordEnabled)
 
   useEffect(() => {
     const interval = setInterval(() => setDateTime(formatDateTime()), 30000)
@@ -38,6 +40,30 @@ export default function Header() {
   useEffect(() => {
     fetchAll()
   }, [fetchAll])
+
+  useEffect(() => {
+    const handler = () => setWakeActive(getWakeWordEnabled())
+    window.addEventListener('jarvis_wake_word_changed', handler)
+    return () => window.removeEventListener('jarvis_wake_word_changed', handler)
+  }, [])
+
+  const [saving, setSaving] = useState(false)
+
+  const endSession = useCallback(async () => {
+    setSaving(true)
+    const { runMemoryBuilder } = await import('@/memory/memoryBuilder')
+    await runMemoryBuilder()
+    setSaving(false)
+  }, [])
+
+  // Save memory on tab close
+  useEffect(() => {
+    const handler = () => {
+      import('@/memory/memoryBuilder').then(({ runMemoryBuilder }) => runMemoryBuilder())
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
 
   const meetingLabel = nextMeetingLabel(selectNextEvent(events))
 
@@ -54,19 +80,71 @@ export default function Header() {
         flexShrink: 0,
       }}
     >
-      <span
-        style={{
-          fontFamily: 'Syne, sans-serif',
-          fontWeight: 600,
-          fontSize: '15px',
-          color: 'var(--text-primary)',
-          letterSpacing: '-0.2px',
-        }}
-      >
-        {getGreeting()}, Tobe
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <span
+          style={{
+            fontFamily: 'Syne, sans-serif',
+            fontWeight: 600,
+            fontSize: '15px',
+            color: 'var(--text-primary)',
+            letterSpacing: '-0.2px',
+          }}
+        >
+          {getGreeting()}, Tobe
+        </span>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* Wake word active indicator */}
+        {wakeActive && (
+          <span
+            title='Wake word active — say "Hey Jarvis"'
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              background: 'rgba(245,158,11,0.1)',
+              border: '1px solid var(--accent-dim)',
+              borderRadius: '999px',
+              padding: '2px 8px',
+              fontSize: '11px',
+              color: 'var(--accent)',
+              fontFamily: 'DM Sans, sans-serif',
+              fontWeight: 500,
+              cursor: 'default',
+            }}
+          >
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: 'var(--accent)',
+                animation: 'wakeWordPulse 2s ease-in-out infinite',
+                flexShrink: 0,
+              }}
+            />
+            Hey Jarvis
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button
+          onClick={endSession}
+          disabled={saving}
+          title="Save session to memory"
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
+            borderRadius: '6px',
+            padding: '4px 10px',
+            fontSize: '11px',
+            color: saving ? 'var(--accent)' : 'var(--text-muted)',
+            cursor: saving ? 'default' : 'pointer',
+            fontFamily: 'DM Sans, sans-serif',
+          }}
+        >
+          {saving ? 'Saving…' : 'End Session'}
+        </button>
         {meetingLabel && (
           <span
             style={{
@@ -93,6 +171,13 @@ export default function Header() {
           {dateTime}
         </span>
       </div>
+
+      <style>{`
+        @keyframes wakeWordPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.8); }
+        }
+      `}</style>
     </header>
   )
 }

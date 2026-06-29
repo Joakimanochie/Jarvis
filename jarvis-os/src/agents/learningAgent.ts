@@ -5,6 +5,8 @@
 import { streamComplete, type ChatMessage } from '@/integrations/kimi'
 import { useGoalsStore } from '@/store/goalsStore'
 import { useTasksStore, selectOpenTasksByProject } from '@/store/tasksStore'
+import { gatherToolContext } from './toolLoop'
+import { getAgentTools } from './tools'
 
 function buildContext(): string {
   const goals = useGoalsStore.getState().goals
@@ -34,11 +36,15 @@ Keep responses under 180 words.`
 export async function runLearningAgent(
   input: string,
   onToken: (fullText: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  skillContent?: string,
 ): Promise<string> {
+  const { tools, handlers } = getAgentTools('learning')
+  const toolData = await gatherToolContext('a learning tutor', input, tools, handlers)
+
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: `${buildContext()}\n\n## User Request\n${input}` },
+    { role: 'system', content: SYSTEM_PROMPT + (skillContent ?? '') },
+    { role: 'user', content: `${buildContext()}${toolData}\n\n## User Request\n${input}` },
   ]
 
   return streamComplete(messages, (_token, fullText) => onToken(fullText), { signal })
